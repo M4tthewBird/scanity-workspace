@@ -4,6 +4,7 @@ dist/
 !.env.example
 supabase/seed.sql
 supabase/migration-*-data.sql
+CLAUDE-info.md
 .claude/settings.local.json
 .DS_Store
 *.log

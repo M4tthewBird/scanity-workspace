@@ -183,7 +183,7 @@ Reálný obsah je jen lokálně v `supabase/seed.sql` a `supabase/migration-*-da
 ## Aktuální podoba (nahrazuje sekce Layout, Design a Struktura výše tam, kde se liší)
 
 - **Horní karty místo sidebaru:** Přehled, Vývoj, Odvětví, Zakázky, CRM, Statistiky. Na mobilu spodní lišta s tlačítkem +.
-- **Vzhled:** moderní a minimalistický, ne Notion. Přepínač světlého a tmavého režimu (`data-theme` na `<html>`), SVG ikony v `components/Icon.tsx`, emoji jen jako obsah stránek. Červené logo jako favicon, ať je záložka hned poznat.
+- **Vzhled:** stejný vizuál jako web Scanity (`scanity-website/deploy/index.css`): písmo Manrope, tokeny barev, gradient se zrnem, bodový mrak v `components/PointCloud.tsx`, pilulková navigace a tmavá tlačítka. Přepínač světlého a tmavého režimu (`data-theme` na `<html>`), SVG ikony v `components/Icon.tsx`, emoji jen jako obsah stránek. Červené logo jako favicon, ať je záložka hned poznat.
 - **Data:** `supabase/migration-002.sql`. Produkt, odvětví, zakázka i šablona jsou řádky `pages` s `kind`, takže všechny mají sekce a úkoly. Nové tabulky: `companies`, `contacts`, `ideas`, `milestones`, `comments`.
 - **Automatické CRM:** `ensureCompany` a `ensureContact` v `lib/useWorkspace.ts` najdou záznam bez ohledu na velikost písmen a diakritiku, nebo ho založí.
 - **Synchronizace:** všechny tabulky jdou přes frontu v `lib/useWorkspace.ts`. Nová tabulka patří do `TABLES` v `lib/types.ts` a do `fetchAll`.
