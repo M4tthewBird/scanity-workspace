@@ -1,9 +1,57 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Logo } from '../components/Logo';
 import { supabase } from '../lib/supabase';
 
 const MIN_PASSWORD_LENGTH = 8;
+
+interface PasswordFieldProps {
+  label: string;
+  autoComplete: string;
+  autoFocus?: boolean;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function PasswordField({ label, autoComplete, autoFocus, value, onChange }: PasswordFieldProps) {
+  const id = useId();
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      <div className="password-input">
+        <input
+          id={id}
+          type={visible ? 'text' : 'password'}
+          autoComplete={autoComplete}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+          autoFocus={autoFocus}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <button
+          type="button"
+          className="password-toggle"
+          aria-label={visible ? 'Skrýt heslo' : 'Zobrazit heslo'}
+          title={visible ? 'Skrýt heslo' : 'Zobrazit heslo'}
+          aria-pressed={visible}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setVisible(!visible)}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+            <circle cx="12" cy="12" r="3" />
+            {visible && <path d="M4 4l16 16" />}
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function Login({ linkFailed }: { linkFailed: boolean }) {
   const [email, setEmail] = useState('');
@@ -50,16 +98,7 @@ export function Login({ linkFailed }: { linkFailed: boolean }) {
           <span>E-mail</span>
           <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
-        <label className="field">
-          <span>Heslo</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
+        <PasswordField label="Heslo" autoComplete="current-password" value={password} onChange={setPassword} />
         {error && <p className="form-error" role="alert">{error}</p>}
         {info && <p className="form-info" role="status">{info}</p>}
         <button className="btn-primary" disabled={busy}>{busy ? 'Přihlašuji…' : 'Přihlásit se'}</button>
@@ -93,17 +132,7 @@ export function SetPassword({ onDone }: { onDone: () => void }) {
       <form className="auth-card" onSubmit={submit}>
         <Logo />
         <h1>Nastavte si heslo</h1>
-        <label className="field">
-          <span>Nové heslo</span>
-          <input
-            type="password"
-            autoComplete="new-password"
-            required
-            autoFocus
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
+        <PasswordField label="Nové heslo" autoComplete="new-password" autoFocus value={password} onChange={setPassword} />
         {error && <p className="form-error" role="alert">{error}</p>}
         <button className="btn-primary" disabled={busy}>{busy ? 'Ukládám…' : 'Uložit heslo'}</button>
       </form>
