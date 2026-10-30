@@ -9,7 +9,7 @@ Repo je veřejné, a proto v něm nejsou žádná data. Data a přihlášení ř
 ### 1. Supabase
 
 1. Založte projekt na [supabase.com](https://supabase.com).
-2. V **SQL Editoru** spusťte `supabase/schema.sql`.
+2. V **SQL Editoru** spusťte `supabase/schema.sql` a potom `supabase/migration-002.sql`.
 3. **Authentication → Sign In / Providers**: vypněte *Allow new users to sign up*.
 4. **Authentication → URL Configuration**:
    - Site URL: `https://m4tthewbird.github.io/scanity-workspace/`
@@ -31,6 +31,19 @@ Repo je veřejné, a proto v něm nejsou žádná data. Data a přihlášení ř
 1. **Settings → Secrets and variables → Actions**: přidejte `VITE_SUPABASE_URL` a `VITE_SUPABASE_ANON_KEY` (Supabase → Project Settings → API).
 2. **Settings → Pages → Source**: zvolte **GitHub Actions**.
 3. Pushněte do `main`. Workflow `.github/workflows/deploy.yml` appku sestaví a nasadí.
+
+### 3. Přístup jen pro čtení (volitelné)
+
+Pro dotazy nad daty bez možnosti cokoli změnit, např. přes Claude, spusťte `supabase/readonly-role.sql` s vlastním dlouhým heslem. Přístupové údaje patří jen do `.env.local`, nikdy do repa. Klíč `service_role` k tomu nepoužívejte.
+
+## Karty appky
+
+- **Přehled**: co hoří, co běží a co se dělo.
+- **Vývoj**: produkty, společné nápady, úkoly a roadmapa.
+- **Odvětví**: velké karty se zakázkami a klienty daného odvětví.
+- **Zakázky**: kanban od poptávky po fakturu. Nová zakázka dostane kopii úkolů ze šablony.
+- **CRM**: firmy a kontakty. Založí se samy ze zakázky nebo z rychlého zápisu kontaktu, případně ručně.
+- **Statistiky**: obrat, rozpracované zakázky a úkoly.
 
 ## Lokální vývoj
 

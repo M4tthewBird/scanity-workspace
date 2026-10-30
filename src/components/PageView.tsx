@@ -2,12 +2,16 @@ import { useEffect, useState } from 'react';
 import type { PointerEvent } from 'react';
 import { focusElement } from '../lib/focus';
 import { byPosition } from '../lib/order';
-import type { Task } from '../lib/types';
+import type { PageKind, Task } from '../lib/types';
 import { useTaskDrag } from '../lib/useTaskDrag';
 import { useWorkspace } from '../lib/useWorkspace';
 import { EditableText } from './EditableText';
 import { EmojiPicker } from './EmojiPicker';
+import { Icon } from './Icon';
+import { IndustryPanel } from './Industries';
+import { JobHistory, JobPanel } from './Jobs';
 import { Section } from './Section';
+import { DevNav } from './Vyvoj';
 
 type Filter = 'all' | 'open' | 'mine';
 
@@ -16,6 +20,13 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'open', label: 'Otevřené' },
   { id: 'mine', label: 'Moje' },
 ];
+
+const PARENTS: Record<PageKind, { href: string; label: string }> = {
+  product: { href: '#/dev', label: 'Vývoj' },
+  industry: { href: '#/industries', label: 'Odvětví' },
+  job: { href: '#/jobs', label: 'Zakázky' },
+  template: { href: '#/jobs', label: 'Zakázky' },
+};
 
 export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (id: string) => void }) {
   const { pages, sections, tasks, me, actions } = useWorkspace();
@@ -41,6 +52,7 @@ export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (
     );
   }
 
+  const parent = PARENTS[page.kind];
   const pageSections = byPosition(sections.filter((s) => s.page_id === pageId));
   const pageTasks = byPosition(tasks.filter((t) => t.page_id === pageId));
   const doneCount = pageTasks.filter((t) => t.done).length;
@@ -51,10 +63,10 @@ export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (
   const newTaskAssignee = filter === 'mine' ? me.user_id : null;
 
   const deletePage = () => {
-    const question = `Smazat stránku „${page.title || 'Bez názvu'}“? Spolu s ní se smažou všechny její úkoly (počet: ${pageTasks.length}). Tuto akci nelze vrátit.`;
+    const question = `Smazat „${page.title || 'Bez názvu'}“? Spolu s tím se smažou všechny úkoly (počet: ${pageTasks.length}). Tuto akci nelze vrátit.`;
     if (window.confirm(question)) {
       actions.deletePage(page.id);
-      location.hash = '#/';
+      location.hash = parent.href;
     }
   };
 
@@ -76,37 +88,45 @@ export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (
   );
 
   return (
-    <article className="page">
+    <article className="view">
+      {page.kind === 'product' ? (
+        <DevNav active={page.id} />
+      ) : (
+        <a className="back-link" href={parent.href}><Icon name="back" size={16} /> {parent.label}</a>
+      )}
+
       <header className="page-header">
-        <div className="page-header-top">
-          <EmojiPicker value={page.icon || '📄'} onChange={(icon) => actions.update('pages', page.id, { icon })} />
-          <button type="button" className="icon-btn page-delete" aria-label="Smazat stránku" title="Smazat stránku" onClick={deletePage}>
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.8 7v4M9.2 7v4" />
-            </svg>
-          </button>
+        <EmojiPicker value={page.icon || '📄'} onChange={(icon) => actions.update('pages', page.id, { icon })} />
+        <div className="page-heading">
+          <EditableText
+            className="page-title"
+            placeholder="Bez názvu"
+            aria-label="Název"
+            data-page-title=""
+            table="pages"
+            rowId={page.id}
+            value={page.title}
+            onValueChange={(title) => actions.update('pages', page.id, { title }, true)}
+          />
+          <EditableText
+            className="page-description"
+            placeholder="Přidat popis…"
+            aria-label="Popis"
+            multiline
+            table="pages"
+            rowId={page.id}
+            value={page.description ?? ''}
+            onValueChange={(description) => actions.update('pages', page.id, { description }, true)}
+          />
         </div>
-        <EditableText
-          className="page-title"
-          placeholder="Bez názvu"
-          aria-label="Název stránky"
-          data-page-title=""
-          table="pages"
-          rowId={page.id}
-          value={page.title}
-          onValueChange={(title) => actions.update('pages', page.id, { title }, true)}
-        />
-        <EditableText
-          className="page-description"
-          placeholder="Přidat popis…"
-          aria-label="Popis stránky"
-          multiline
-          table="pages"
-          rowId={page.id}
-          value={page.description ?? ''}
-          onValueChange={(description) => actions.update('pages', page.id, { description }, true)}
-        />
+        <button type="button" className="icon-btn page-delete" aria-label="Smazat" title="Smazat" onClick={deletePage}>
+          <Icon name="trash" />
+        </button>
       </header>
+
+      {page.kind === 'template' && <p className="form-hint">Každá nová zakázka dostane kopii těchto úkolů.</p>}
+      {page.kind === 'job' && <JobPanel job={page} />}
+      {page.kind === 'industry' && <IndustryPanel industry={page} />}
 
       <div className="progress-row">
         <div
@@ -122,7 +142,7 @@ export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (
         <span className="progress-label">{doneCount} / {pageTasks.length} hotovo</span>
       </div>
 
-      <div className="filters" role="group" aria-label="Filtr úkolů">
+      <div className="segmented filters" role="group" aria-label="Filtr úkolů">
         {FILTERS.map((f) => (
           <button
             type="button"
@@ -149,6 +169,8 @@ export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (
       >
         + Nová sekce
       </button>
+
+      {page.kind === 'job' && <JobHistory job={page} />}
 
       {drag && (
         <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}>

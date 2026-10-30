@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { TABLES } from './types';
 import type { Member, TableName, WorkspaceData } from './types';
 
 export type Row = { id: string; updated_at?: string | null };
@@ -30,13 +31,18 @@ async function fetchRows<T>(table: string, orderBy: string): Promise<T[]> {
 }
 
 export async function fetchAll(): Promise<WorkspaceData> {
-  const [members, pages, sections, tasks] = await Promise.all([
+  const [members, pages, sections, tasks, companies, contacts, ideas, milestones, comments] = await Promise.all([
     fetchRows<WorkspaceData['members'][number]>('members', 'name'),
     fetchRows<WorkspaceData['pages'][number]>('pages', 'position'),
     fetchRows<WorkspaceData['sections'][number]>('sections', 'position'),
     fetchRows<WorkspaceData['tasks'][number]>('tasks', 'position'),
+    fetchRows<WorkspaceData['companies'][number]>('companies', 'name'),
+    fetchRows<WorkspaceData['contacts'][number]>('contacts', 'name'),
+    fetchRows<WorkspaceData['ideas'][number]>('ideas', 'created_at'),
+    fetchRows<WorkspaceData['milestones'][number]>('milestones', 'position'),
+    fetchRows<WorkspaceData['comments'][number]>('comments', 'created_at'),
   ]);
-  return { members, pages, sections, tasks };
+  return { members, pages, sections, tasks, companies, contacts, ideas, milestones, comments };
 }
 
 // Upsert místo insertu: opakování po výpadku spojení nesmí skončit chybou duplicity.
@@ -61,7 +67,7 @@ let channelCounter = 0;
 
 export function subscribe(onChange: (change: RemoteChange) => void, onConnected: () => void): () => void {
   const channel = supabase.channel(`workspace-${++channelCounter}`);
-  for (const table of ['pages', 'sections', 'tasks'] as const) {
+  for (const table of TABLES) {
     channel.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
       if (payload.eventType === 'DELETE') {
         const id = (payload.old as Row).id;

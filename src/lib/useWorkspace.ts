@@ -2,7 +2,22 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore } 
 import * as api from './api';
 import type { Backend, RemoteChange, Row } from './api';
 import { between, byPosition, hasGap, STEP } from './order';
-import type { Member, Page, Section, TableName, Task, WorkspaceData } from './types';
+import { sameText } from './text';
+import { JOB_STAGES, TABLES } from './types';
+import type {
+  CommentTarget,
+  Contact,
+  Idea,
+  JobStage,
+  Member,
+  Milestone,
+  Page,
+  PageKind,
+  TableName,
+  TableRows,
+  Task,
+  WorkspaceData,
+} from './types';
 
 export type SaveStatus = 'saved' | 'saving' | 'offline' | 'error';
 
@@ -12,13 +27,42 @@ export interface WorkspaceState extends WorkspaceData {
   status: SaveStatus;
 }
 
+export interface NewJob {
+  title: string;
+  companyName?: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  industryId?: string | null;
+  price?: number | null;
+}
+
 type Op =
   | { kind: 'insert'; table: TableName; id: string; row: Row }
   | { kind: 'update'; table: TableName; id: string; patch: object }
   | { kind: 'delete'; table: TableName; id: string; removedKeys: string[] };
 
+type AnyRow = Row & Record<string, unknown>;
+
 const TEXT_DEBOUNCE_MS = 500;
 const RETRY_MS = 5000;
+
+// Odkazy, které databáze při smazání řádku nastaví na null.
+const SET_NULL_REFS: Partial<Record<TableName, [TableName, string][]>> = {
+  pages: [
+    ['pages', 'industry_id'],
+    ['companies', 'industry_id'],
+    ['ideas', 'product_id'],
+    ['milestones', 'product_id'],
+  ],
+  sections: [['tasks', 'section_id']],
+  milestones: [['tasks', 'milestone_id']],
+  companies: [
+    ['contacts', 'company_id'],
+    ['pages', 'company_id'],
+  ],
+  contacts: [['pages', 'contact_id']],
+};
 
 const rowKey = (table: TableName, id: string) => `${table}:${id}`;
 
@@ -37,6 +81,11 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
     pages: [],
     sections: [],
     tasks: [],
+    companies: [],
+    contacts: [],
+    ideas: [],
+    milestones: [],
+    comments: [],
     ready: false,
     loadFailed: false,
     status: 'saved',
@@ -60,7 +109,7 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
     listeners.forEach((listener) => listener());
   };
 
-  const rows = (table: TableName) => state[table] as unknown as Row[];
+  const rows = (table: TableName) => state[table] as unknown as AnyRow[];
   const setRows = (table: TableName, next: Row[]) => set({ [table]: next } as Partial<WorkspaceState>);
 
   const syncStatus = () => {
@@ -104,17 +153,16 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
       for (const s of state.sections) if (s.page_id === id) removed.push(rowKey('sections', s.id));
       for (const t of state.tasks) if (t.page_id === id) removed.push(rowKey('tasks', t.id));
       set({
-        pages: state.pages.filter((p) => p.id !== id),
         sections: state.sections.filter((s) => s.page_id !== id),
         tasks: state.tasks.filter((t) => t.page_id !== id),
       });
-    } else if (table === 'sections') {
-      set({
-        sections: state.sections.filter((s) => s.id !== id),
-        tasks: state.tasks.map((t) => (t.section_id === id ? { ...t, section_id: null } : t)),
-      });
-    } else {
-      set({ tasks: state.tasks.filter((t) => t.id !== id) });
+    }
+    setRows(table, rows(table).filter((r) => r.id !== id));
+    for (const [refTable, field] of SET_NULL_REFS[table] ?? []) {
+      const current = rows(refTable);
+      if (current.some((r) => r[field] === id)) {
+        setRows(refTable, current.map((r) => (r[field] === id ? { ...r, [field]: null } : r)));
+      }
     }
     for (const key of removed) {
       deleted.add(key);
@@ -196,12 +244,7 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
 
   const flushAll = () => [...dirty.keys()].forEach(flush);
 
-  function update<T extends TableName>(
-    table: T,
-    id: string,
-    patch: Partial<T extends 'pages' ? Page : T extends 'sections' ? Section : Task>,
-    debounce = false,
-  ) {
+  function update<T extends TableName>(table: T, id: string, patch: Partial<TableRows[T]>, debounce = false) {
     const key = rowKey(table, id);
     if (deleted.has(key)) return;
     upsertLocal(table, { id, ...patch } as Row);
@@ -217,10 +260,13 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
     }
   }
 
-  const insert = (table: TableName, row: Row) => {
-    upsertLocal(table, row);
-    enqueue({ kind: 'insert', table, id: row.id, row });
-  };
+  function insert<T extends TableName>(table: T, row: Partial<TableRows[T]>): string {
+    const id = crypto.randomUUID();
+    const full = { id, ...row } as Row;
+    upsertLocal(table, full);
+    enqueue({ kind: 'insert', table, id, row: full });
+    return id;
+  }
 
   const remove = (table: TableName, id: string) => {
     const removedKeys = removeLocal(table, id);
@@ -229,6 +275,9 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
       if (op.kind === 'update' && removedKeys.includes(rowKey(op.table, op.id))) queue.splice(i, 1);
     }
     enqueue({ kind: 'delete', table, id, removedKeys });
+    if (table !== 'comments') {
+      for (const comment of state.comments) if (comment.target_id === id) remove('comments', comment.id);
+    }
   };
 
   const refresh = async () => {
@@ -257,14 +306,11 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
         );
         return [...merged, ...pendingInserts];
       };
-      set({
-        members: fetched.members,
-        pages: merge('pages', fetched.pages as unknown as Row[]) as unknown as Page[],
-        sections: merge('sections', fetched.sections as unknown as Row[]) as unknown as Section[],
-        tasks: merge('tasks', fetched.tasks as unknown as Row[]) as unknown as Task[],
-        ready: true,
-        loadFailed: false,
-      });
+      const next: Partial<WorkspaceState> = { members: fetched.members, ready: true, loadFailed: false };
+      for (const table of TABLES) {
+        Object.assign(next, { [table]: merge(table, fetched[table] as unknown as Row[]) });
+      }
+      set(next);
     } catch (error) {
       if (token !== refreshToken) return;
       console.error('Načtení selhalo', error);
@@ -311,6 +357,160 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
     return (index + 1) * STEP;
   };
 
+  const createPage = (kind: PageKind, extra: Partial<Page> = {}): string => {
+    const last = byPosition(state.pages.filter((p) => p.kind === kind)).at(-1);
+    return insert('pages', {
+      kind,
+      title: '',
+      icon: '📄',
+      description: '',
+      tags: [],
+      position: between(last?.position),
+      ...extra,
+    });
+  };
+
+  const createTask = (
+    pageId: string,
+    sectionId: string | null,
+    afterId?: string,
+    assignee?: string | null,
+    extra: Partial<Task> = {},
+  ): string => {
+    const siblings = siblingTasks(pageId, sectionId);
+    const afterIndex = afterId ? siblings.findIndex((t) => t.id === afterId) : -1;
+    const index = afterIndex >= 0 ? afterIndex + 1 : siblings.length;
+    return insert('tasks', {
+      page_id: pageId,
+      section_id: sectionId,
+      milestone_id: null,
+      text: '',
+      done: false,
+      priority: null,
+      assignee: assignee ?? null,
+      due: null,
+      notes: '',
+      tags: [],
+      position: positionAt(siblings, index),
+      created_by: userId,
+      ...extra,
+    });
+  };
+
+  // Automatické CRM: firma a kontakt se založí při prvním zmínění, jinak se najde stávající.
+  const ensureCompany = (name: string | undefined, industryId?: string | null): string | null => {
+    const trimmed = name?.trim();
+    if (!trimmed) return null;
+    const existing = state.companies.find((c) => sameText(c.name, trimmed));
+    if (existing) {
+      if (industryId && !existing.industry_id) update('companies', existing.id, { industry_id: industryId });
+      return existing.id;
+    }
+    return insert('companies', {
+      name: trimmed,
+      industry_id: industryId ?? null,
+      website: '',
+      notes: '',
+      created_by: userId,
+    });
+  };
+
+  const ensureContact = (
+    input: { name?: string; email?: string; phone?: string; companyId?: string | null },
+  ): string | null => {
+    const name = input.name?.trim() ?? '';
+    const email = input.email?.trim() ?? '';
+    const phone = input.phone?.trim() ?? '';
+    if (!name && !email && !phone) return null;
+    const existing = state.contacts.find(
+      (c) => (email && sameText(c.email ?? '', email)) || (name && sameText(c.name, name)),
+    );
+    if (existing) {
+      const patch: Partial<Contact> = {};
+      if (email && !existing.email) patch.email = email;
+      if (phone && !existing.phone) patch.phone = phone;
+      if (input.companyId && !existing.company_id) patch.company_id = input.companyId;
+      if (Object.keys(patch).length > 0) update('contacts', existing.id, patch);
+      return existing.id;
+    }
+    return insert('contacts', {
+      name: name || email || phone,
+      company_id: input.companyId ?? null,
+      role: '',
+      email,
+      phone,
+      notes: '',
+      created_by: userId,
+    });
+  };
+
+  const addComment = (targetType: CommentTarget, targetId: string, body: string, system = false): string =>
+    insert('comments', { target_type: targetType, target_id: targetId, body, system, author: userId });
+
+  const createJob = (input: NewJob): string => {
+    const companyId = ensureCompany(input.companyName, input.industryId);
+    const contactId = ensureContact({
+      name: input.contactName,
+      email: input.email,
+      phone: input.phone,
+      companyId,
+    });
+    const jobId = createPage('job', {
+      title: input.title.trim(),
+      icon: '💼',
+      stage: 'poptavka',
+      industry_id: input.industryId ?? null,
+      company_id: companyId,
+      contact_id: contactId,
+      price: input.price ?? null,
+    });
+    // Nová zakázka dostane kopii sekcí a úkolů ze šablony.
+    const template = state.pages.find((p) => p.kind === 'template');
+    if (template) {
+      const sectionIds = new Map<string, string>();
+      for (const section of byPosition(state.sections.filter((s) => s.page_id === template.id))) {
+        sectionIds.set(section.id, insert('sections', { page_id: jobId, title: section.title, position: section.position }));
+      }
+      for (const task of byPosition(state.tasks.filter((t) => t.page_id === template.id))) {
+        insert('tasks', {
+          page_id: jobId,
+          section_id: task.section_id ? (sectionIds.get(task.section_id) ?? null) : null,
+          milestone_id: null,
+          text: task.text,
+          done: false,
+          priority: task.priority,
+          assignee: null,
+          due: null,
+          notes: task.notes,
+          tags: task.tags,
+          position: task.position,
+          created_by: userId,
+        });
+      }
+    }
+    return jobId;
+  };
+
+  // Úkol z rychlého zápisu nebo z nápadu potřebuje stránku, poslední možnost je založit obecnou.
+  const defaultProductId = (): string =>
+    byPosition(state.pages.filter((p) => p.kind === 'product'))[0]?.id ??
+    createPage('product', { title: 'Obecné', icon: '📌' });
+
+  const createMilestone = (input: Partial<Milestone>): string => {
+    const last = byPosition(state.milestones).at(-1);
+    return insert('milestones', {
+      title: '',
+      product_id: null,
+      start_date: null,
+      end_date: null,
+      notes: '',
+      position: between(last?.position),
+      ...input,
+    });
+  };
+
+  const finishIdea = (idea: Idea) => update('ideas', idea.id, { status: 'done' });
+
   return {
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -347,50 +547,24 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
     },
 
     update,
+    remove,
 
-    createPage(): string {
-      const id = crypto.randomUUID();
-      const last = byPosition(state.pages).at(-1);
-      insert('pages', {
-        id,
-        title: '',
-        icon: '📄',
-        description: '',
-        position: between(last?.position),
-      } as Row);
-      return id;
-    },
-    deletePage: (id: string) => remove('pages', id),
+    createPage,
+    createTask,
+    defaultProductId,
+    createJob,
+    createMilestone,
+    addComment,
+
+    deleteComment: (id: string) => remove('comments', id),
 
     createSection(pageId: string): string {
-      const id = crypto.randomUUID();
       const last = byPosition(state.sections.filter((s) => s.page_id === pageId)).at(-1);
-      insert('sections', { id, page_id: pageId, title: 'Nová sekce', position: between(last?.position) } as Row);
-      return id;
+      return insert('sections', { page_id: pageId, title: 'Nová sekce', position: between(last?.position) });
     },
     deleteSection: (id: string) => remove('sections', id),
-
-    createTask(pageId: string, sectionId: string | null, afterId?: string, assignee?: string | null): string {
-      const id = crypto.randomUUID();
-      const siblings = siblingTasks(pageId, sectionId);
-      const afterIndex = afterId ? siblings.findIndex((t) => t.id === afterId) : -1;
-      const index = afterIndex >= 0 ? afterIndex + 1 : siblings.length;
-      insert('tasks', {
-        id,
-        page_id: pageId,
-        section_id: sectionId,
-        text: '',
-        done: false,
-        priority: null,
-        assignee: assignee ?? null,
-        due: null,
-        notes: '',
-        position: positionAt(siblings, index),
-        created_by: userId,
-      } as Row);
-      return id;
-    },
     deleteTask: (id: string) => remove('tasks', id),
+    deletePage: (id: string) => remove('pages', id),
 
     moveTask(taskId: string, sectionId: string | null, overTaskId: string | null, before: boolean) {
       const task = state.tasks.find((t) => t.id === taskId);
@@ -404,6 +578,74 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
     moveTaskToPage(taskId: string, pageId: string) {
       const siblings = siblingTasks(pageId, null, taskId);
       update('tasks', taskId, { page_id: pageId, section_id: null, position: positionAt(siblings, siblings.length) });
+    },
+
+    setJobStage(jobId: string, stage: JobStage) {
+      const job = state.pages.find((p) => p.id === jobId);
+      if (!job || job.stage === stage) return;
+      update('pages', jobId, { stage });
+      const label = JOB_STAGES.find((s) => s.id === stage)?.label ?? stage;
+      addComment('job', jobId, `Stav změněn na ${label}`, true);
+    },
+
+    setJobCompany(jobId: string, name: string) {
+      const job = state.pages.find((p) => p.id === jobId);
+      if (!job) return;
+      const companyId = ensureCompany(name, job.industry_id);
+      update('pages', jobId, { company_id: companyId });
+      const contact = state.contacts.find((c) => c.id === job.contact_id);
+      if (companyId && contact && !contact.company_id) update('contacts', contact.id, { company_id: companyId });
+    },
+
+    setJobContact(jobId: string, name: string) {
+      const job = state.pages.find((p) => p.id === jobId);
+      if (!job) return;
+      update('pages', jobId, { contact_id: ensureContact({ name, companyId: job.company_id }) });
+    },
+
+    setJobIndustry(jobId: string, industryId: string | null) {
+      const job = state.pages.find((p) => p.id === jobId);
+      if (!job) return;
+      update('pages', jobId, { industry_id: industryId });
+      const company = state.companies.find((c) => c.id === job.company_id);
+      if (industryId && company && !company.industry_id) update('companies', company.id, { industry_id: industryId });
+    },
+
+    createCompany: (name = '') =>
+      insert('companies', { name, industry_id: null, website: '', notes: '', created_by: userId }),
+
+    createContact: (input: { name?: string; email?: string; phone?: string; companyName?: string; companyId?: string | null }) =>
+      insert('contacts', {
+        name: input.name?.trim() ?? '',
+        company_id: input.companyId ?? ensureCompany(input.companyName),
+        role: '',
+        email: input.email ?? '',
+        phone: input.phone ?? '',
+        notes: '',
+        created_by: userId,
+      }),
+
+    ensureContact,
+    ensureCompany,
+
+    createIdea: (text: string, productId: string | null = null): string =>
+      insert('ideas', { text: text.trim(), notes: '', status: 'new', product_id: productId, tags: [], created_by: userId }),
+
+    ideaToTask(idea: Idea): string {
+      const pageId = idea.product_id ?? defaultProductId();
+      createTask(pageId, null, undefined, null, { text: idea.text, notes: idea.notes, tags: idea.tags });
+      finishIdea(idea);
+      return pageId;
+    },
+    ideaToMilestone(idea: Idea): string {
+      const id = createMilestone({ title: idea.text, product_id: idea.product_id, notes: idea.notes });
+      finishIdea(idea);
+      return id;
+    },
+    ideaToJob(idea: Idea): string {
+      const id = createJob({ title: idea.text });
+      finishIdea(idea);
+      return id;
     },
   };
 }
@@ -424,4 +666,10 @@ export function useWorkspace(): Workspace {
   const workspace = useContext(WorkspaceContext);
   if (!workspace) throw new Error('useWorkspace mimo WorkspaceContext');
   return workspace;
+}
+
+// Úkoly šablony jsou jen předloha, do přehledů a statistik nepatří.
+export function liveTasks(workspace: Pick<WorkspaceData, 'tasks' | 'pages'>): Task[] {
+  const templates = new Set(workspace.pages.filter((p) => p.kind === 'template').map((p) => p.id));
+  return workspace.tasks.filter((t) => !templates.has(t.page_id));
 }

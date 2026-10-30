@@ -3,6 +3,7 @@ import { adjacentTaskId, focusTask } from '../lib/focus';
 import type { Task } from '../lib/types';
 import { useWorkspace } from '../lib/useWorkspace';
 import { EditableText } from './EditableText';
+import { Icon } from './Icon';
 import { TaskChips } from './TaskChips';
 
 interface Props {
@@ -47,7 +48,7 @@ export function TaskRow({ task, newTaskAssignee, dropHint, dragging, onDragStart
         tabIndex={-1}
         onPointerDown={(event) => onDragStart(event, task)}
       >
-        ⋮⋮
+        <Icon name="grip" size={16} />
       </button>
       <input
         type="checkbox"
@@ -69,7 +70,7 @@ export function TaskRow({ task, newTaskAssignee, dropHint, dragging, onDragStart
       />
       <TaskChips task={task} />
       <button type="button" className="icon-btn open-task" aria-label="Otevřít detail" title="Otevřít detail" onClick={() => onOpen(task.id)}>
-        ↗
+        <Icon name="open" size={16} />
       </button>
     </div>
   );

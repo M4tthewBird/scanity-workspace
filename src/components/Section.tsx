@@ -4,6 +4,7 @@ import type { Section as SectionRow, Task } from '../lib/types';
 import type { DragState } from '../lib/useTaskDrag';
 import { useWorkspace } from '../lib/useWorkspace';
 import { EditableText } from './EditableText';
+import { Icon } from './Icon';
 import { TaskRow } from './TaskRow';
 
 interface Props {
@@ -45,7 +46,7 @@ export function Section({ pageId, section, tasks, allTasks, newTaskAssignee, dra
           />
           <span className="section-count">{doneCount}/{allTasks.length}</span>
           <button type="button" className="icon-btn section-delete" aria-label="Smazat sekci" title="Smazat sekci" onClick={deleteSection}>
-            ✕
+            <Icon name="close" size={16} />
           </button>
         </header>
       )}

@@ -1,16 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { Login, SetPassword } from './auth/Login';
+import { CompanyDetail, ContactDetail, Crm } from './components/Crm';
+import { Dashboard } from './components/Dashboard';
+import { Ideas } from './components/Ideas';
+import { Industries } from './components/Industries';
+import { Jobs } from './components/Jobs';
 import { Logo } from './components/Logo';
-import { MyTasks, Overview } from './components/Overview';
+import { AllTasks } from './components/Overview';
 import { PageView } from './components/PageView';
-import { Sidebar, SaveIndicator } from './components/Sidebar';
+import { QuickAdd } from './components/QuickAdd';
+import type { Toast } from './components/QuickAdd';
+import { Roadmap } from './components/Roadmap';
+import { SearchDialog } from './components/SearchDialog';
+import { Stats } from './components/Stats';
 import { TaskDrawer } from './components/TaskDrawer';
+import { TopBar } from './components/TopBar';
+import { DevHome } from './components/Vyvoj';
 import { fetchMember } from './lib/api';
 import { authLink, isConfigured, supabase } from './lib/supabase';
 import type { Member } from './lib/types';
 import { useRoute } from './lib/useRoute';
+import type { Route } from './lib/useRoute';
 import { useWorkspaceStore, WorkspaceContext } from './lib/useWorkspace';
+
+const TOAST_MS = 4000;
 
 function Notice({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
@@ -89,48 +103,103 @@ function MemberGate({ userId }: { userId: string }) {
   return <WorkspaceApp me={member} />;
 }
 
+function RouteView({ route, onOpenTask }: { route: Route; onOpenTask: (id: string) => void }) {
+  switch (route.name) {
+    case 'page':
+      return <PageView key={route.id} pageId={route.id} onOpenTask={onOpenTask} />;
+    case 'dev':
+      return <DevHome />;
+    case 'ideas':
+      return <Ideas />;
+    case 'tasks':
+      return <AllTasks onOpenTask={onOpenTask} />;
+    case 'roadmap':
+      return <Roadmap />;
+    case 'industries':
+      return <Industries />;
+    case 'jobs':
+      return <Jobs />;
+    case 'crm':
+      return <Crm />;
+    case 'company':
+      return <CompanyDetail key={route.id} id={route.id} />;
+    case 'contact':
+      return <ContactDetail key={route.id} id={route.id} />;
+    case 'stats':
+      return <Stats />;
+    default:
+      return <Dashboard onOpenTask={onOpenTask} />;
+  }
+}
+
 function WorkspaceApp({ me }: { me: Member }) {
   const workspace = useWorkspaceStore(me);
   const route = useRoute();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
-  const routeKey = route.name === 'page' ? route.id : route.name;
+  const [adding, setAdding] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const keepTask = useRef<string | null>(null);
+  const routeKey = route.name === 'page' || route.name === 'company' || route.name === 'contact' ? route.id : route.name;
 
   useEffect(() => {
-    setMenuOpen(false);
-    setOpenTaskId(null);
+    setOpenTaskId(keepTask.current);
+    keepTask.current = null;
+    document.querySelector('.main')?.scrollTo(0, 0);
   }, [routeKey]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearching(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const openTask = workspace.tasks.find((t) => t.id === openTaskId);
 
   return (
     <WorkspaceContext.Provider value={workspace}>
       <div className="app">
-        <Sidebar route={route} open={menuOpen} onClose={() => setMenuOpen(false)} onSignOut={signOut} />
-        <div className="content">
-          <header className="topbar">
-            <button className="icon-btn" aria-label="Otevřít menu" onClick={() => setMenuOpen(true)}>☰</button>
-            <Logo />
-            <SaveIndicator />
-          </header>
-          <main className="main">
-            {workspace.loadFailed ? (
-              <div className="empty">
-                <p>Data se nepodařilo načíst.</p>
-                <button className="btn-secondary" onClick={workspace.actions.reload}>Zkusit znovu</button>
-              </div>
-            ) : !workspace.ready ? (
-              <div className="empty">Načítám…</div>
-            ) : route.name === 'page' ? (
-              <PageView key={route.id} pageId={route.id} onOpenTask={setOpenTaskId} />
-            ) : route.name === 'my' ? (
-              <MyTasks onOpenTask={setOpenTaskId} />
-            ) : (
-              <Overview onOpenTask={setOpenTaskId} />
-            )}
-          </main>
-        </div>
+        <TopBar route={route} onAdd={() => setAdding(true)} onSearch={() => setSearching(true)} onSignOut={signOut} />
+        <main className="main">
+          {workspace.loadFailed ? (
+            <div className="empty">
+              <p>Data se nepodařilo načíst. Zkontrolujte připojení a zkuste to znovu.</p>
+              <button className="btn-secondary" onClick={workspace.actions.reload}>Zkusit znovu</button>
+            </div>
+          ) : !workspace.ready ? (
+            <div className="empty">Načítám…</div>
+          ) : (
+            <RouteView route={route} onOpenTask={setOpenTaskId} />
+          )}
+        </main>
         {openTask && <TaskDrawer key={openTask.id} task={openTask} onClose={() => setOpenTaskId(null)} />}
+        {adding && <QuickAdd route={route} onClose={() => setAdding(false)} onDone={setToast} />}
+        {searching && (
+          <SearchDialog
+            onClose={() => setSearching(false)}
+            onOpenTask={(id) => {
+              keepTask.current = id;
+              setOpenTaskId(id);
+            }}
+          />
+        )}
+        {toast && (
+          <div className="toast" role="status">
+            {toast.message}
+            {toast.href && <a href={toast.href}>Otevřít</a>}
+          </div>
+        )}
       </div>
     </WorkspaceContext.Provider>
   );

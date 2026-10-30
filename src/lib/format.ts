@@ -19,6 +19,19 @@ export function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('cs-CZ', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+export function formatPrice(price: number): string {
+  return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: 'CZK', maximumFractionDigits: 0 }).format(price);
+}
+
+export function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString('cs-CZ');
+}
+
+export function addDays(iso: string, days: number): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 export function initial(name: string): string {
   return name.trim().charAt(0).toUpperCase() || '?';
 }

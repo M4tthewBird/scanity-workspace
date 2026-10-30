@@ -1,6 +1,7 @@
 import { formatDue, initial, isOverdue } from '../lib/format';
 import type { Priority, Task } from '../lib/types';
 import { useWorkspace } from '../lib/useWorkspace';
+import { Icon } from './Icon';
 
 const NEXT_PRIORITY: Record<string, Priority | null> = { none: 'P1', P1: 'P2', P2: 'P3', P3: null };
 
@@ -38,7 +39,7 @@ export function TaskChips({ task }: { task: Task }) {
       </label>
 
       <label className={`chip due ${task.due ? '' : 'chip-empty'} ${overdue ? 'overdue' : ''}`} title="Termín">
-        {task.due ? formatDue(task.due) : '📅'}
+        {task.due ? formatDue(task.due) : <Icon name="calendar" size={14} />}
         <input
           type="date"
           aria-label="Termín"

@@ -3,10 +3,13 @@ import { formatDateTime } from '../lib/format';
 import { byPosition } from '../lib/order';
 import type { Priority, Task } from '../lib/types';
 import { useWorkspace } from '../lib/useWorkspace';
+import { Comments } from './Comments';
 import { EditableText } from './EditableText';
+import { TagInput } from './Fields';
+import { Icon } from './Icon';
 
 export function TaskDrawer({ task, onClose }: { task: Task; onClose: () => void }) {
-  const { pages, sections, members, actions } = useWorkspace();
+  const { pages, sections, members, milestones, actions } = useWorkspace();
   const pageSections = byPosition(sections.filter((s) => s.page_id === task.page_id));
   const author = members.find((m) => m.user_id === task.created_by);
 
@@ -39,7 +42,7 @@ export function TaskDrawer({ task, onClose }: { task: Task; onClose: () => void 
             />
             {task.done ? 'Hotovo' : 'Otevřené'}
           </label>
-          <button type="button" className="icon-btn" aria-label="Zavřít detail" onClick={onClose}>✕</button>
+          <button type="button" className="icon-btn" aria-label="Zavřít detail" onClick={onClose}><Icon name="close" /></button>
         </div>
 
         <EditableText
@@ -56,8 +59,8 @@ export function TaskDrawer({ task, onClose }: { task: Task; onClose: () => void 
           <label className="field-row">
             <span>Stránka</span>
             <select value={task.page_id} onChange={(e) => actions.moveTaskToPage(task.id, e.target.value)}>
-              {byPosition(pages).map((p) => (
-                <option key={p.id} value={p.id}>{p.icon} {p.title || 'Bez názvu'}</option>
+              {byPosition(pages.filter((p) => p.kind !== 'template')).map((p) => (
+                <option key={p.id} value={p.id}>{p.title || 'Bez názvu'}</option>
               ))}
             </select>
           </label>
@@ -105,6 +108,22 @@ export function TaskDrawer({ task, onClose }: { task: Task; onClose: () => void 
               onChange={(e) => actions.update('tasks', task.id, { due: e.target.value || null })}
             />
           </label>
+          <label className="field-row">
+            <span>Roadmapa</span>
+            <select
+              value={task.milestone_id ?? ''}
+              onChange={(e) => actions.update('tasks', task.id, { milestone_id: e.target.value || null })}
+            >
+              <option value="">Nepřipojeno</option>
+              {byPosition(milestones).map((m) => (
+                <option key={m.id} value={m.id}>{m.title || 'Bez názvu'}</option>
+              ))}
+            </select>
+          </label>
+          <div className="field-row">
+            <span>Štítky</span>
+            <TagInput tags={task.tags} onChange={(tags) => actions.update('tasks', task.id, { tags })} />
+          </div>
         </div>
 
         <label className="drawer-notes-label" htmlFor="task-notes">Poznámky</label>
@@ -118,6 +137,8 @@ export function TaskDrawer({ task, onClose }: { task: Task; onClose: () => void 
           value={task.notes ?? ''}
           onValueChange={(notes) => actions.update('tasks', task.id, { notes }, true)}
         />
+
+        <Comments type="task" id={task.id} />
 
         <footer className="drawer-footer">
           <p>

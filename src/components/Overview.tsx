@@ -1,15 +1,19 @@
+import { useState } from 'react';
+import { downloadCsv } from '../lib/csv';
 import { byPosition } from '../lib/order';
 import { pageHref } from '../lib/useRoute';
 import type { Task } from '../lib/types';
-import { useWorkspace } from '../lib/useWorkspace';
+import { liveTasks, useWorkspace } from '../lib/useWorkspace';
+import { ExportButton } from './Fields';
+import { DevNav } from './Vyvoj';
 import { TaskChips } from './TaskChips';
 
-function OverviewRow({ task, showPage, onOpen }: { task: Task; showPage: boolean; onOpen: (id: string) => void }) {
+export function TaskListRow({ task, showPage, onOpen }: { task: Task; showPage: boolean; onOpen: (id: string) => void }) {
   const { pages, actions } = useWorkspace();
   const page = pages.find((p) => p.id === task.page_id);
 
   return (
-    <div className="task-row overview-row">
+    <div className={`task-row overview-row ${task.done ? 'is-done' : ''}`}>
       <input
         type="checkbox"
         className="task-check"
@@ -22,7 +26,7 @@ function OverviewRow({ task, showPage, onOpen }: { task: Task; showPage: boolean
       </button>
       {showPage && page && (
         <a className="page-tag" href={pageHref(page.id)}>
-          {page.icon} {page.title || 'Bez názvu'}
+          {page.title || 'Bez názvu'}
         </a>
       )}
       <TaskChips task={task} />
@@ -37,65 +41,70 @@ const PRIORITY_GROUPS = [
   { key: null, title: 'Bez priority' },
 ] as const;
 
-export function Overview({ onOpenTask }: { onOpenTask: (id: string) => void }) {
-  const { tasks, pages } = useWorkspace();
+export function AllTasks({ onOpenTask }: { onOpenTask: (id: string) => void }) {
+  const workspace = useWorkspace();
+  const { pages, members } = workspace;
+  const [assignee, setAssignee] = useState('');
+  const [tag, setTag] = useState('');
+  const tasks = liveTasks(workspace);
+  const tags = [...new Set(tasks.flatMap((t) => t.tags ?? []))].sort();
   const pageOrder = new Map(pages.map((p) => [p.id, p.position]));
-  const open = byPosition(tasks.filter((t) => !t.done)).sort(
-    (a, b) => (pageOrder.get(a.page_id) ?? 0) - (pageOrder.get(b.page_id) ?? 0),
-  );
+  const open = byPosition(
+    tasks.filter((t) => !t.done && (!assignee || t.assignee === assignee) && (!tag || t.tags?.includes(tag))),
+  ).sort((a, b) => (pageOrder.get(a.page_id) ?? 0) - (pageOrder.get(b.page_id) ?? 0));
+
+  const exportCsv = () =>
+    downloadCsv(
+      'scanity-ukoly.csv',
+      ['Úkol', 'Stránka', 'Hotovo', 'Priorita', 'Přiřazeno', 'Termín', 'Štítky', 'Poznámky'],
+      tasks.map((t) => [
+        t.text,
+        pages.find((p) => p.id === t.page_id)?.title,
+        t.done,
+        t.priority,
+        members.find((m) => m.user_id === t.assignee)?.name,
+        t.due,
+        t.tags,
+        t.notes,
+      ]),
+    );
 
   return (
-    <article className="page">
-      <h1 className="view-title">Přehled</h1>
-      {open.length === 0 && <p className="empty">Žádné otevřené úkoly.</p>}
+    <div className="view">
+      <DevNav active="tasks" />
+      <div className="toolbar">
+        <h1>Všechny otevřené úkoly</h1>
+        <select aria-label="Filtr podle člověka" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+          <option value="">Všichni</option>
+          {members.map((m) => (
+            <option key={m.user_id} value={m.user_id}>{m.name}</option>
+          ))}
+        </select>
+        {tags.length > 0 && (
+          <select aria-label="Filtr podle štítku" value={tag} onChange={(e) => setTag(e.target.value)}>
+            <option value="">Všechny štítky</option>
+            {tags.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        )}
+        <ExportButton onClick={exportCsv} />
+      </div>
+      {open.length === 0 && <p className="empty-note">Tomuhle filtru neodpovídá žádný otevřený úkol.</p>}
       {PRIORITY_GROUPS.map(({ key, title }) => {
         const group = open.filter((t) => t.priority === key);
         if (group.length === 0) return null;
         return (
-          <section className="section" key={title}>
+          <section className="task-group" key={title}>
             <h2 className="group-title">
-              {title} <span className="section-count">{group.length}</span>
+              {title} <span className="count">{group.length}</span>
             </h2>
             {group.map((task) => (
-              <OverviewRow key={task.id} task={task} showPage onOpen={onOpenTask} />
+              <TaskListRow key={task.id} task={task} showPage onOpen={onOpenTask} />
             ))}
           </section>
         );
       })}
-    </article>
-  );
-}
-
-// Řazení podle termínu: ISO data jdou porovnat jako text, úkoly bez termínu patří na konec.
-const dueRank = (due: string | null) => due ?? '9999-99-99';
-
-export function MyTasks({ onOpenTask }: { onOpenTask: (id: string) => void }) {
-  const { tasks, pages, me } = useWorkspace();
-  const mine = tasks
-    .filter((t) => !t.done && t.assignee === me.user_id)
-    .sort((a, b) => dueRank(a.due).localeCompare(dueRank(b.due)) || a.position - b.position);
-  // Díky seřazeným úkolům jdou stránky s nejbližším termínem první.
-  const pageIds = [...new Set(mine.map((t) => t.page_id))];
-
-  return (
-    <article className="page">
-      <h1 className="view-title">Moje úkoly</h1>
-      {mine.length === 0 && <p className="empty">Nemáte žádné otevřené úkoly.</p>}
-      {pageIds.map((pageId) => {
-        const page = pages.find((p) => p.id === pageId);
-        return (
-          <section className="section" key={pageId}>
-            <h2 className="group-title">
-              <a href={pageHref(pageId)}>{page?.icon} {page?.title || 'Bez názvu'}</a>
-            </h2>
-            {mine
-              .filter((t) => t.page_id === pageId)
-              .map((task) => (
-                <OverviewRow key={task.id} task={task} showPage={false} onOpen={onOpenTask} />
-              ))}
-          </section>
-        );
-      })}
-    </article>
+    </div>
   );
 }
