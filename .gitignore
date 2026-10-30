@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env*
+!.env.example
+supabase/seed.sql
+.claude/settings.local.json
+.DS_Store
+*.log
