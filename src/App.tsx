@@ -30,7 +30,7 @@ export default function App() {
   if (!isConfigured) {
     return (
       <Notice title="Chybí konfigurace">
-        <p>Doplňte VITE_SUPABASE_URL a VITE_SUPABASE_ANON_KEY podle README.</p>
+        <p>VITE_SUPABASE_URL nebo VITE_SUPABASE_ANON_KEY chybí nebo je neplatný. Opravte je podle README.</p>
       </Notice>
     );
   }
