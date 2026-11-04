@@ -1,13 +1,16 @@
-import { addDays, formatDue, formatPrice, todayIso } from '../lib/format';
+import { addDays, todayIso } from '../lib/format';
 import { byPosition } from '../lib/order';
 import { pageHref } from '../lib/useRoute';
-import { JOB_STAGES } from '../lib/types';
+import type { Task } from '../lib/types';
 import { liveTasks, useWorkspace } from '../lib/useWorkspace';
 import { Icon } from './Icon';
 import { TaskListRow } from './Overview';
+import { ProjectBoard } from './ProjectBoard';
+import { projectState } from './ProjectTile';
 
 const WEEK = 7;
-const FEED_SIZE = 12;
+const FEED_SIZE = 10;
+const MINE_SIZE = 8;
 
 function plural(count: number, one: string, few: string, many: string): string {
   if (count === 1) return `1 ${one}`;
@@ -32,9 +35,9 @@ interface FeedItem {
   href: string;
 }
 
-function Column({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+function Column({ title, count, className, children }: { title: string; count?: number; className?: string; children: React.ReactNode }) {
   return (
-    <section className="dash-block">
+    <section className={`dash-block ${className ?? ''}`}>
       <h2>
         {title}
         {count !== undefined && <span className="count">{count}</span>}
@@ -44,28 +47,37 @@ function Column({ title, count, children }: { title: string; count?: number; chi
   );
 }
 
+// Hoří: priorita P1, nebo termín dnes, zítra či už po něm.
+function isBurning(task: Task, today: string): boolean {
+  return task.priority === 'P1' || Boolean(task.due && task.due <= addDays(today, 1));
+}
+
 export function Dashboard({ onOpenTask }: { onOpenTask: (id: string) => void }) {
   const workspace = useWorkspace();
-  const { pages, ideas, comments, milestones, members, me } = workspace;
+  const { pages, ideas, comments, members, me } = workspace;
   const today = todayIso();
   const tasks = liveTasks(workspace);
   const open = tasks.filter((t) => !t.done);
   const jobs = pages.filter((p) => p.kind === 'job');
-  const activeJobs = jobs.filter((j) => j.stage === 'realizace' || j.stage === 'nabidka');
+  const pinned = [
+    ...byPosition(pages.filter((p) => p.pinned && p.kind === 'product')),
+    ...byPosition(pages.filter((p) => p.pinned && p.kind === 'job')),
+  ];
+  // Bez migration-004.sql sloupec pinned v datech vůbec není.
+  const migrated = pages.length === 0 || pages.some((p) => p.pinned !== undefined);
 
-  const byDue = (a: { due: string | null }, b: { due: string | null }) => (a.due ?? '').localeCompare(b.due ?? '');
-  const overdue = open.filter((t) => t.due && t.due < today).sort(byDue);
-  const soon = open.filter((t) => t.due && t.due >= today && t.due <= addDays(today, WEEK)).sort(byDue);
-  const mine = open.filter((t) => t.assignee === me.user_id && !overdue.includes(t) && !soon.includes(t));
+  const hotProjects = pinned.filter((p) => projectState(p) === 'hot');
+  const byUrgency = (a: Task, b: Task) =>
+    (a.due ?? '9999').localeCompare(b.due ?? '9999') || (a.priority ?? 'P9').localeCompare(b.priority ?? 'P9');
+  const burning = open.filter((t) => isBurning(t, today)).sort(byUrgency);
+  const soon = open.filter((t) => !burning.includes(t) && t.due && t.due <= addDays(today, WEEK)).sort(byUrgency);
+  const mine = open.filter((t) => t.assignee === me.user_id && !burning.includes(t) && !soon.includes(t));
   const newIdeas = ideas.filter((i) => i.status === 'new');
-  const running = byPosition(milestones).filter(
-    (m) => m.start_date && m.start_date <= today && (!m.end_date || m.end_date >= today),
-  );
+  const fireCount = hotProjects.length + burning.length;
 
   const summary = [
-    overdue.length > 0 && plural(overdue.length, 'úkol po termínu', 'úkoly po termínu', 'úkolů po termínu'),
+    fireCount > 0 && plural(fireCount, 'věc hoří', 'věci hoří', 'věcí hoří'),
     soon.length > 0 && `${plural(soon.length, 'úkol', 'úkoly', 'úkolů')} tento týden`,
-    activeJobs.length > 0 && plural(activeJobs.length, 'rozběhnutá zakázka', 'rozběhnuté zakázky', 'rozběhnutých zakázek'),
     newIdeas.length > 0 && plural(newIdeas.length, 'nový nápad', 'nové nápady', 'nových nápadů'),
   ].filter(Boolean) as string[];
 
@@ -103,11 +115,6 @@ export function Dashboard({ onOpenTask }: { onOpenTask: (id: string) => void }) 
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, FEED_SIZE);
 
-  const milestoneProgress = (id: string) => {
-    const linked = tasks.filter((t) => t.milestone_id === id);
-    return linked.length ? Math.round((linked.filter((t) => t.done).length / linked.length) * 100) : null;
-  };
-
   return (
     <div className="view dash">
       <header className="dash-head">
@@ -116,56 +123,37 @@ export function Dashboard({ onOpenTask }: { onOpenTask: (id: string) => void }) 
 
       <div className="dash-grid">
         <div className="dash-main">
-          {overdue.length > 0 && (
-            <Column title="Po termínu" count={overdue.length}>
-              {overdue.map((task) => <TaskListRow key={task.id} task={task} showPage onOpen={onOpenTask} />)}
+          {migrated ? (
+            <ProjectBoard />
+          ) : (
+            <p className="empty-note">Dlaždice projektů potřebují v Supabase spustit <code>supabase/migration-004.sql</code>.</p>
+          )}
+
+          {soon.length > 0 && (
+            <Column title="Tento týden" count={soon.length}>
+              {soon.map((task) => <TaskListRow key={task.id} task={task} showPage onOpen={onOpenTask} />)}
             </Column>
           )}
 
-          <Column title="Tento týden" count={soon.length}>
-            {soon.length === 0 && <p className="empty-note">Na příštích 7 dní nic nemá termín.</p>}
-            {soon.map((task) => <TaskListRow key={task.id} task={task} showPage onOpen={onOpenTask} />)}
-          </Column>
-
           <Column title="Moje další úkoly" count={mine.length}>
             {mine.length === 0 && <p className="empty-note">Nic dalšího nemáte přiřazeno. Přiřaďte si úkol kliknutím na kolečko u něj.</p>}
-            {mine.slice(0, 8).map((task) => <TaskListRow key={task.id} task={task} showPage onOpen={onOpenTask} />)}
+            {mine.slice(0, MINE_SIZE).map((task) => <TaskListRow key={task.id} task={task} showPage onOpen={onOpenTask} />)}
           </Column>
         </div>
 
         <aside className="dash-side">
-          <Column title="Rozběhnuté zakázky" count={activeJobs.length}>
-            {activeJobs.length === 0 && <p className="empty-note">Teď žádná neběží. <a href="#/jobs">Otevřít zakázky</a></p>}
-            {activeJobs.map((job) => {
-              const jobTasks = tasks.filter((t) => t.page_id === job.id);
-              return (
-                <a className="dash-row" href={pageHref(job.id)} key={job.id}>
-                  <span className="dash-row-title">{job.title || 'Bez názvu'}</span>
-                  <span className="dash-row-meta">
-                    {JOB_STAGES.find((s) => s.id === job.stage)?.label}
-                    {job.price != null && ` · ${formatPrice(job.price)}`}
-                    {job.due_date && ` · do ${formatDue(job.due_date)}`}
-                    {jobTasks.length > 0 && ` · ${jobTasks.filter((t) => t.done).length}/${jobTasks.length}`}
-                  </span>
-                </a>
-              );
-            })}
-          </Column>
-
-          <Column title="Běží na roadmapě" count={running.length}>
-            {running.length === 0 && <p className="empty-note">Žádná položka teď neběží. <a href="#/dev/roadmap">Doplnit termíny</a></p>}
-            {running.map((item) => {
-              const progress = milestoneProgress(item.id);
-              return (
-                <a className="dash-row" href="#/dev/roadmap" key={item.id}>
-                  <span className="dash-row-title">{item.title || 'Bez názvu'}</span>
-                  <span className="dash-row-meta">
-                    {item.end_date ? `do ${formatDue(item.end_date)}` : 'bez konce'}
-                    {progress !== null && ` · ${progress} % hotovo`}
-                  </span>
-                </a>
-              );
-            })}
+          <Column title="Co hoří" count={fireCount} className="dash-fire">
+            {fireCount === 0 && <p className="empty-note">Nic nehoří. Projekt sem dostanete stavem Hoří, úkol prioritou P1 nebo termínem do zítřka.</p>}
+            {hotProjects.map((page) => (
+              <a className="fire-project" href={pageHref(page.id)} key={page.id}>
+                <Icon name="flame" size={16} />
+                <span className="fire-body">
+                  <span className="dash-row-title">{page.title || 'Bez názvu'}</span>
+                  {page.status && <span className="dash-row-meta fire-status">{page.status}</span>}
+                </span>
+              </a>
+            ))}
+            {burning.map((task) => <TaskListRow key={task.id} task={task} showPage onOpen={onOpenTask} />)}
           </Column>
 
           <Column title="Co se dělo">

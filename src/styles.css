@@ -872,6 +872,331 @@ kbd {
   text-decoration: underline;
 }
 
+/* Projektové dlaždice na Přehledu */
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.project-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 180px;
+  padding: 18px;
+  background: var(--raised);
+  border: 1px solid transparent;
+  border-radius: 20px;
+  box-shadow: var(--shadow-soft);
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.project-tile.is-hot {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+  box-shadow: var(--shadow-soft), inset 0 3px 0 var(--red);
+}
+
+.project-tile.is-paused {
+  opacity: 0.7;
+}
+
+.project-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.project-icon {
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.project-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.project-title {
+  font-family: var(--heading);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.project-title:hover {
+  color: var(--accent-text);
+}
+
+.project-who {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.project-board {
+  display: flex;
+  flex-direction: column;
+}
+
+.project-group + .project-group {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 6px;
+  margin-left: -6px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  font: 700 12px/1.6 var(--heading);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  resize: none;
+}
+
+textarea.group-name:hover,
+textarea.group-name:focus {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
+.group-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.project-group:hover .group-actions,
+.group-actions:focus-within {
+  opacity: 1;
+}
+
+.group-up .icon {
+  transform: rotate(90deg);
+}
+
+.group-down .icon {
+  transform: rotate(-90deg);
+}
+
+.icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.new-group {
+  align-self: flex-start;
+  margin-top: 18px;
+}
+
+.tile-menu {
+  position: relative;
+  margin: -4px -6px 0 0;
+}
+
+.tile-popover {
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 210px;
+  padding: 10px;
+}
+
+.tile-popover .stack-field {
+  margin-bottom: 6px;
+}
+
+.tile-popover .btn-quiet {
+  justify-content: flex-start;
+}
+
+.tile-popover .btn-quiet:disabled {
+  opacity: 0.4;
+}
+
+.flip-icon .icon {
+  transform: scaleX(-1);
+}
+
+.add-tile-form {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.add-tile-form input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+}
+
+@media (hover: none) {
+  .group-actions {
+    opacity: 1;
+  }
+}
+
+.project-status {
+  flex: 1;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  width: calc(100% + 16px);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-soft);
+  font: inherit;
+  line-height: 1.5;
+  resize: none;
+}
+
+.project-status:hover {
+  background: var(--hover);
+}
+
+.project-status:focus {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
+.project-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.state-pill {
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.state-pill.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.state-pill.is-waiting {
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+
+.state-pill.is-hot {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.state-pill.is-paused {
+  background: var(--gray-soft);
+  color: var(--muted);
+}
+
+.project-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.project-meta:hover {
+  color: var(--text);
+}
+
+.project-add {
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 8px;
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  box-shadow: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-add:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.project-add.is-picking {
+  flex-direction: column;
+  cursor: default;
+}
+
+.project-add select {
+  width: 100%;
+}
+
+/* Co hoří */
+
+.fire-project {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  margin: 0 -8px 4px;
+  border-radius: 10px;
+  background: var(--red-soft);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.fire-project > .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--red);
+}
+
+.fire-project:hover {
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+}
+
+.fire-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fire-status {
+  white-space: pre-line;
+}
+
 /* Produkty */
 
 .product-row {

@@ -2,6 +2,7 @@ export type Priority = 'P1' | 'P2' | 'P3';
 export type PageKind = 'product' | 'industry' | 'job' | 'template';
 export type JobStage = 'poptavka' | 'nabidka' | 'realizace' | 'predano' | 'vyfakturovano';
 export type IdeaStatus = 'new' | 'considering' | 'approved' | 'rejected' | 'done';
+export type ProjectState = 'active' | 'waiting' | 'hot' | 'paused';
 export type CommentTarget = 'task' | 'job' | 'idea' | 'company' | 'contact' | 'milestone';
 
 export interface Member {
@@ -25,6 +26,10 @@ export interface Page {
   company_id: string | null;
   contact_id: string | null;
   tags: string[];
+  // Z migration-004.sql, bez ní chybí.
+  status?: string;
+  state?: ProjectState | null;
+  pinned?: boolean;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -135,6 +140,13 @@ export const JOB_STAGES: { id: JobStage; label: string }[] = [
   { id: 'realizace', label: 'Realizace' },
   { id: 'predano', label: 'Předáno' },
   { id: 'vyfakturovano', label: 'Vyfakturováno' },
+];
+
+export const PROJECT_STATES: { id: ProjectState; label: string }[] = [
+  { id: 'active', label: 'Běží' },
+  { id: 'waiting', label: 'Čekáme' },
+  { id: 'hot', label: 'Hoří' },
+  { id: 'paused', label: 'Pozastaveno' },
 ];
 
 export const IDEA_STATUSES: { id: IdeaStatus; label: string }[] = [
