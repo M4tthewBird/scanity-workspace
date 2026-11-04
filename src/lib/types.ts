@@ -2,7 +2,9 @@ export type Priority = 'P1' | 'P2' | 'P3';
 export type PageKind = 'product' | 'industry' | 'job' | 'template';
 export type JobStage = 'poptavka' | 'nabidka' | 'realizace' | 'predano' | 'vyfakturovano';
 export type IdeaStatus = 'new' | 'considering' | 'approved' | 'rejected' | 'done';
-export type ProjectState = 'active' | 'waiting' | 'hot' | 'paused';
+export type ProjectState = 'active' | 'waiting' | 'hot' | 'paused' | 'done';
+export type SectionView = 'list' | 'board' | 'table' | 'timeline';
+export type TaskStatus = 'todo' | 'doing' | 'waiting' | 'done';
 export type CommentTarget = 'task' | 'job' | 'idea' | 'company' | 'contact' | 'milestone';
 
 export interface Member {
@@ -39,6 +41,8 @@ export interface Section {
   page_id: string;
   title: string;
   position: number;
+  // Z migration-005.sql, bez ní chybí.
+  view?: SectionView;
 }
 
 export interface Task {
@@ -54,6 +58,9 @@ export interface Task {
   notes: string | null;
   tags: string[];
   position: number;
+  // Z migration-005.sql, bez ní chybí.
+  status?: TaskStatus | null;
+  start?: string | null;
   created_by: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -117,6 +124,27 @@ export interface Comment {
   created_at: string | null;
 }
 
+export interface Meeting {
+  id: string;
+  title: string;
+  started_at: string;
+  ended_at: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface MeetingNote {
+  id: string;
+  meeting_id: string;
+  page_id: string | null;
+  body: string;
+  position: number;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export interface TableRows {
   pages: Page;
   sections: Section;
@@ -126,11 +154,27 @@ export interface TableRows {
   ideas: Idea;
   milestones: Milestone;
   comments: Comment;
+  meetings: Meeting;
+  meeting_notes: MeetingNote;
 }
 
 export type TableName = keyof TableRows;
 
-export const TABLES: TableName[] = ['pages', 'sections', 'tasks', 'companies', 'contacts', 'ideas', 'milestones', 'comments'];
+export const TABLES: TableName[] = [
+  'pages',
+  'sections',
+  'tasks',
+  'companies',
+  'contacts',
+  'ideas',
+  'milestones',
+  'comments',
+  'meetings',
+  'meeting_notes',
+];
+
+// Tabulky z novějších migrací: když v databázi ještě nejsou, appka běží dál bez nich.
+export const OPTIONAL_TABLES: TableName[] = ['meetings', 'meeting_notes'];
 
 export type WorkspaceData = { members: Member[] } & { [T in TableName]: TableRows[T][] };
 
@@ -147,6 +191,25 @@ export const PROJECT_STATES: { id: ProjectState; label: string }[] = [
   { id: 'waiting', label: 'Čekáme' },
   { id: 'hot', label: 'Hoří' },
   { id: 'paused', label: 'Pozastaveno' },
+  { id: 'done', label: 'Hotovo' },
+];
+
+export const TASK_STATUSES: { id: TaskStatus; label: string }[] = [
+  { id: 'todo', label: 'K udělání' },
+  { id: 'doing', label: 'Rozpracováno' },
+  { id: 'waiting', label: 'Čeká' },
+  { id: 'done', label: 'Hotovo' },
+];
+
+// Hotovo řídí zaškrtávátko, stav jen rozlišuje otevřené úkoly.
+export const taskStatus = (task: Task): TaskStatus =>
+  task.done ? 'done' : task.status && task.status !== 'done' ? task.status : 'todo';
+
+export const SECTION_VIEWS: { id: SectionView; label: string }[] = [
+  { id: 'list', label: 'Seznam' },
+  { id: 'board', label: 'Kanban' },
+  { id: 'table', label: 'Tabulka' },
+  { id: 'timeline', label: 'Timeline' },
 ];
 
 export const IDEA_STATUSES: { id: IdeaStatus; label: string }[] = [

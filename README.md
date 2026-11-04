@@ -9,7 +9,7 @@ Repo je veřejné, a proto v něm nejsou žádná data. Data a přihlášení ř
 ### 1. Supabase
 
 1. Založte projekt na [supabase.com](https://supabase.com).
-2. V **SQL Editoru** spusťte `supabase/schema.sql` a potom `supabase/migration-002.sql` a `supabase/migration-004.sql`.
+2. V **SQL Editoru** spusťte `supabase/schema.sql` a potom `supabase/migration-002.sql` , `supabase/migration-004.sql`, `supabase/migration-005.sql` a `supabase/migration-006.sql`.
 3. **Authentication → Sign In / Providers**: vypněte *Allow new users to sign up*.
 4. **Authentication → URL Configuration**:
    - Site URL: `https://m4tthewbird.github.io/scanity-workspace/`

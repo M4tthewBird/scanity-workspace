@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
+import { hasMeetings } from '../lib/api';
+import { focusElement } from '../lib/focus';
 import { todayIso } from '../lib/format';
-import { byPosition } from '../lib/order';
+import { groupOf, useProjectGroups } from '../lib/projectGroups';
 import { pageHref } from '../lib/useRoute';
 import { PROJECT_STATES } from '../lib/types';
-import type { Page, ProjectState } from '../lib/types';
+import type { Meeting, Page, ProjectState } from '../lib/types';
 import { liveTasks, useWorkspace } from '../lib/useWorkspace';
 import { EditableText } from './EditableText';
 import { Icon } from './Icon';
 
 export const projectState = (page: Page): ProjectState => page.state ?? 'active';
+
+// Probíhající meeting: poslední zahájený, který ještě nebyl ukončen.
+export const activeMeeting = (meetings: Meeting[]): Meeting | undefined =>
+  meetings.filter((m) => !m.ended_at).sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
 
 function tasksLabel(open: number): string {
   if (open === 0) return 'Bez otevřených úkolů';
@@ -16,21 +23,23 @@ function tasksLabel(open: number): string {
   return `${open} ${open <= 4 ? 'otevřené úkoly' : 'otevřených úkolů'}`;
 }
 
-function useOutsideClose(open: boolean, close: () => void) {
+export function useOutsideClose(open: boolean, close: () => void) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(close);
+  closeRef.current = close;
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) close();
+      if (!ref.current?.contains(event.target as Node)) closeRef.current();
     };
-    const onKeyDown = (event: KeyboardEvent) => event.key === 'Escape' && close();
+    const onKeyDown = (event: KeyboardEvent) => event.key === 'Escape' && closeRef.current();
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [open, close]);
+  }, [open]);
   return ref;
 }
 
@@ -39,13 +48,17 @@ interface TileProps {
   onMove: (direction: -1 | 1) => void;
   canMoveBack: boolean;
   canMoveForward: boolean;
+  dropHint: 'before' | 'after' | null;
+  dragging: boolean;
+  onDragStart: (event: ReactPointerEvent, page: Page) => void;
 }
 
-function TileMenu({ page, onMove, canMoveBack, canMoveForward }: TileProps) {
-  const { pages, actions } = useWorkspace();
+function TileMenu({ page, onMove, canMoveBack, canMoveForward }: Pick<TileProps, 'page' | 'onMove' | 'canMoveBack' | 'canMoveForward'>) {
+  const { actions } = useWorkspace();
+  const { options, move, duplicate, normalize } = useProjectGroups();
   const [open, setOpen] = useState(false);
   const ref = useOutsideClose(open, () => setOpen(false));
-  const industries = byPosition(pages.filter((p) => p.kind === 'industry'));
+  const current = normalize(groupOf(page));
 
   return (
     <div className="tile-menu" ref={ref}>
@@ -60,23 +73,31 @@ function TileMenu({ page, onMove, canMoveBack, canMoveForward }: TileProps) {
       </button>
       {open && (
         <div className="popover tile-popover">
-          {page.kind === 'job' && (
-            <label className="stack-field">
-              Obor
-              <select
-                value={page.industry_id ?? ''}
-                onChange={(e) => {
-                  actions.setJobIndustry(page.id, e.target.value || null);
-                  setOpen(false);
-                }}
-              >
-                <option value="">Bez oboru</option>
-                {industries.map((i) => (
-                  <option key={i.id} value={i.id}>{i.title || 'Bez názvu'}</option>
-                ))}
-              </select>
-            </label>
-          )}
+          <label className="stack-field">
+            Přesunout do
+            <select
+              value={current}
+              onChange={(e) => {
+                move(page.id, e.target.value);
+                setOpen(false);
+              }}
+            >
+              {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="stack-field">
+            Duplikovat do
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) duplicate(page.id, e.target.value);
+                setOpen(false);
+              }}
+            >
+              <option value="" disabled>Vyberte skupinu…</option>
+              {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </label>
           <button type="button" className="btn-quiet" disabled={!canMoveBack} onClick={() => onMove(-1)}>
             <Icon name="back" size={16} /> Posunout dřív
           </button>
@@ -92,8 +113,7 @@ function TileMenu({ page, onMove, canMoveBack, canMoveForward }: TileProps) {
   );
 }
 
-export function ProjectTile(props: TileProps) {
-  const { page } = props;
+export function ProjectTile({ page, dropHint, dragging, onDragStart, ...menu }: TileProps) {
   const workspace = useWorkspace();
   const { contacts, companies, actions } = workspace;
   const state = projectState(page);
@@ -106,16 +126,35 @@ export function ProjectTile(props: TileProps) {
     page.kind === 'job'
       ? [contact?.name, company && company.name !== page.title ? company.name : null].filter(Boolean).join(' · ')
       : '';
+  const classes = ['project-tile', `is-${state}`, dragging && 'is-drag-source', dropHint && `drop-${dropHint}`];
+  const meeting = activeMeeting(workspace.meetings);
+  const notes = workspace.meeting_notes.filter((n) => n.page_id === page.id && n.body.trim());
+  const latestNote = notes.sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))[0];
+  const inMeeting = meeting ? notes.filter((n) => n.meeting_id === meeting.id).length : 0;
+
+  const addToMeeting = () => {
+    if (!meeting) return;
+    const id = actions.addMeetingNote(meeting.id, '', page.id);
+    focusElement(`[data-meeting-note="${id}"]`);
+  };
 
   return (
-    <article className={`project-tile is-${state}`}>
-      <header className="project-head">
+    <article className={classes.filter(Boolean).join(' ')} data-tile={page.id}>
+      <header
+        className="project-head"
+        title="Přetáhněte pro přesun, s Alt nebo Ctrl pro kopii"
+        onPointerDown={(event) => {
+          if ((event.target as HTMLElement).closest('.tile-menu')) return;
+          onDragStart(event, page);
+        }}
+      >
+        <span className="project-grip" aria-hidden="true"><Icon name="grip" size={14} /></span>
         <span className="project-icon" aria-hidden="true">{page.icon || '📄'}</span>
         <div className="project-name">
-          <a className="project-title" href={pageHref(page.id)}>{page.title || 'Bez názvu'}</a>
+          <a className="project-title" href={pageHref(page.id)} draggable={false}>{page.title || 'Bez názvu'}</a>
           {who && <span className="project-who">{who}</span>}
         </div>
-        <TileMenu {...props} />
+        <TileMenu page={page} {...menu} />
       </header>
 
       <EditableText
@@ -129,18 +168,21 @@ export function ProjectTile(props: TileProps) {
         onValueChange={(status) => actions.update('pages', page.id, { status }, true)}
       />
 
+      {latestNote && (
+        <p className="project-note" title={latestNote.body}>
+          <Icon name="note" size={13} /> {latestNote.body}
+        </p>
+      )}
+
+      {meeting && (
+        <button type="button" className={`tile-meeting ${inMeeting ? 'has-notes' : ''}`} onClick={addToMeeting}>
+          <Icon name="plus" size={14} /> Do zápisu{inMeeting > 0 && ` · ${inMeeting}`}
+        </button>
+      )}
+
       <footer className="project-foot">
-        <select
-          className={`state-pill is-${state}`}
-          aria-label={`Stav: ${page.title || 'projekt'}`}
-          value={state}
-          onChange={(e) => actions.update('pages', page.id, { state: e.target.value as ProjectState })}
-        >
-          {PROJECT_STATES.map((s) => (
-            <option key={s.id} value={s.id}>{s.label}</option>
-          ))}
-        </select>
-        <a className="project-meta" href={pageHref(page.id)}>
+        <StatePill page={page} />
+        <a className="project-meta" href={pageHref(page.id)} draggable={false}>
           {tasksLabel(open.length)}
           {overdue > 0 && <span className="is-overdue"> · {overdue} po termínu</span>}
         </a>
@@ -149,12 +191,31 @@ export function ProjectTile(props: TileProps) {
   );
 }
 
-// Poslední dlaždice skupiny: připne existující projekt, nebo rovnou založí nový.
-export function AddTile({ candidates, onPick, onCreate, noun }: {
+export function StatePill({ page }: { page: Page }) {
+  const { actions } = useWorkspace();
+  const state = projectState(page);
+  // Hotovo potřebuje migration-006.sql, bez ní by zápis selhal na kontrole v databázi.
+  const states = PROJECT_STATES.filter((s) => s.id !== 'done' || hasMeetings());
+  return (
+    <select
+      className={`state-pill is-${state}`}
+      aria-label={`Stav: ${page.title || 'projekt'}`}
+      value={state}
+      onChange={(e) => actions.update('pages', page.id, { state: e.target.value as ProjectState })}
+    >
+      {states.map((s) => (
+        <option key={s.id} value={s.id}>{s.label}</option>
+      ))}
+    </select>
+  );
+}
+
+// Plus vedle názvu skupiny: založí nový projekt, nebo připne existující.
+export function AddButton({ candidates, onPick, onCreate, label }: {
   candidates: Page[];
   onPick: (id: string) => void;
   onCreate: (title: string) => void;
-  noun: string;
+  label: string;
 }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -164,16 +225,13 @@ export function AddTile({ candidates, onPick, onCreate, noun }: {
   };
   const ref = useOutsideClose(open, close);
 
-  if (!open) {
-    return (
-      <button type="button" className="project-tile project-add" onClick={() => setOpen(true)}>
-        <Icon name="plus" size={18} /> Přidat {noun}
-      </button>
-    );
-  }
-
   return (
-    <div className="project-tile project-add is-picking" ref={ref}>
+    <div className="add-button" ref={ref}>
+      <button type="button" className="icon-btn group-add" aria-label={label} title={label} aria-expanded={open} onClick={() => (open ? close() : setOpen(true))}>
+        <Icon name="plus" size={16} />
+      </button>
+      {open && (
+    <div className="popover add-popover">
       <form
         className="add-tile-form"
         onSubmit={(e) => {
@@ -184,7 +242,7 @@ export function AddTile({ candidates, onPick, onCreate, noun }: {
       >
         <input
           autoFocus
-          placeholder={`Název nového projektu`}
+          placeholder="Název nového projektu"
           aria-label="Název nového projektu"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -194,7 +252,7 @@ export function AddTile({ candidates, onPick, onCreate, noun }: {
       {candidates.length > 0 && (
         <select
           aria-label="Připnout existující"
-          defaultValue=""
+          value=""
           onChange={(e) => {
             if (e.target.value) onPick(e.target.value);
             close();
@@ -205,6 +263,8 @@ export function AddTile({ candidates, onPick, onCreate, noun }: {
             <option key={p.id} value={p.id}>{p.title || 'Bez názvu'}</option>
           ))}
         </select>
+      )}
+    </div>
       )}
     </div>
   );

@@ -13,9 +13,12 @@ import type {
   Milestone,
   Page,
   PageKind,
+  Section,
+  SectionView,
   TableName,
   TableRows,
   Task,
+  TaskStatus,
   WorkspaceData,
 } from './types';
 
@@ -54,6 +57,7 @@ const SET_NULL_REFS: Partial<Record<TableName, [TableName, string][]>> = {
     ['companies', 'industry_id'],
     ['ideas', 'product_id'],
     ['milestones', 'product_id'],
+    ['meeting_notes', 'page_id'],
   ],
   sections: [['tasks', 'section_id']],
   milestones: [['tasks', 'milestone_id']],
@@ -86,6 +90,8 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
     ideas: [],
     milestones: [],
     comments: [],
+    meetings: [],
+    meeting_notes: [],
     ready: false,
     loadFailed: false,
     status: 'saved',
@@ -558,9 +564,78 @@ export function createWorkspaceStore(userId: string, backend: Backend = api) {
 
     deleteComment: (id: string) => remove('comments', id),
 
-    createSection(pageId: string): string {
+    createSection(pageId: string, extra: Partial<Section> = {}): string {
       const last = byPosition(state.sections.filter((s) => s.page_id === pageId)).at(-1);
-      return insert('sections', { page_id: pageId, title: 'Nová sekce', position: between(last?.position) });
+      return insert('sections', { page_id: pageId, title: 'Nová sekce', position: between(last?.position), ...extra });
+    },
+
+    // Přepnutí pohledu úkolů bez sekce nejdřív založí sekci, protože pohled patří sekci.
+    setSectionView(pageId: string, sectionId: string | null, view: SectionView): string {
+      if (sectionId) {
+        update('sections', sectionId, { view });
+        return sectionId;
+      }
+      const first = byPosition(state.sections.filter((s) => s.page_id === pageId))[0];
+      const id = insert('sections', { page_id: pageId, title: 'Úkoly', position: between(undefined, first?.position), view });
+      for (const task of state.tasks.filter((t) => t.page_id === pageId && t.section_id === null)) {
+        update('tasks', task.id, { section_id: id });
+      }
+      return id;
+    },
+
+    startMeeting(): string {
+      const date = new Date().toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
+      return insert('meetings', { title: `Meeting ${date}`, started_at: new Date().toISOString(), ended_at: null, created_by: userId });
+    },
+    endMeeting(id: string) {
+      update('meetings', id, { ended_at: new Date().toISOString() });
+    },
+    deleteMeeting(id: string) {
+      for (const note of state.meeting_notes.filter((n) => n.meeting_id === id)) remove('meeting_notes', note.id);
+      remove('meetings', id);
+    },
+    addMeetingNote(meetingId: string, body: string, pageId: string | null): string {
+      const last = byPosition(state.meeting_notes.filter((n) => n.meeting_id === meetingId)).at(-1);
+      return insert('meeting_notes', {
+        meeting_id: meetingId,
+        page_id: pageId,
+        body,
+        position: between(last?.position),
+        created_by: userId,
+      });
+    },
+    // Bod ze zápisu jako úkol v přiřazeném projektu.
+    meetingNoteToTask(noteId: string): string | null {
+      const note = state.meeting_notes.find((n) => n.id === noteId);
+      if (!note?.page_id) return null;
+      return createTask(note.page_id, null, undefined, null, { text: note.body, notes: 'Z meetingu' });
+    },
+
+    setTaskStatus(taskId: string, status: TaskStatus) {
+      update('tasks', taskId, { status, done: status === 'done' });
+    },
+
+    // Kopie stránky i se sekcemi a úkoly. Komentáře a historie zůstávají u originálu.
+    duplicatePage(pageId: string, patch: Partial<Page> = {}): string {
+      const page = state.pages.find((p) => p.id === pageId);
+      if (!page) return '';
+      const { id: _id, created_at: _c, updated_at: _u, ...rest } = page;
+      const copyId = insert('pages', { ...rest, title: `${page.title || 'Bez názvu'} (kopie)`, ...patch });
+      const sectionIds = new Map<string, string>();
+      for (const section of byPosition(state.sections.filter((s) => s.page_id === pageId))) {
+        const { id, page_id: _p, ...sectionRest } = section;
+        sectionIds.set(id, insert('sections', { ...sectionRest, page_id: copyId }));
+      }
+      for (const task of byPosition(state.tasks.filter((t) => t.page_id === pageId))) {
+        const { id: _t, created_at: _tc, updated_at: _tu, ...taskRest } = task;
+        insert('tasks', {
+          ...taskRest,
+          page_id: copyId,
+          section_id: task.section_id ? (sectionIds.get(task.section_id) ?? null) : null,
+          created_by: userId,
+        });
+      }
+      return copyId;
     },
     deleteSection: (id: string) => remove('sections', id),
     deleteTask: (id: string) => remove('tasks', id),

@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { formatDateTime } from '../lib/format';
 import { byPosition } from '../lib/order';
-import type { Priority, Task } from '../lib/types';
+import { TASK_STATUSES, taskStatus } from '../lib/types';
+import type { Priority, Task, TaskStatus } from '../lib/types';
 import { useWorkspace } from '../lib/useWorkspace';
 import { Comments } from './Comments';
 import { EditableText } from './EditableText';
@@ -12,6 +13,7 @@ export function TaskDrawer({ task, onClose }: { task: Task; onClose: () => void 
   const { pages, sections, members, milestones, actions } = useWorkspace();
   const pageSections = byPosition(sections.filter((s) => s.page_id === task.page_id));
   const author = members.find((m) => m.user_id === task.created_by);
+  const viewsEnabled = sections.some((s) => s.view !== undefined);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -100,6 +102,24 @@ export function TaskDrawer({ task, onClose }: { task: Task; onClose: () => void 
               ))}
             </select>
           </label>
+          {viewsEnabled && (
+            <>
+              <label className="field-row">
+                <span>Stav</span>
+                <select value={taskStatus(task)} onChange={(e) => actions.setTaskStatus(task.id, e.target.value as TaskStatus)}>
+                  {TASK_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+              </label>
+              <label className="field-row">
+                <span>Začátek</span>
+                <input
+                  type="date"
+                  value={task.start ?? ''}
+                  onChange={(e) => actions.update('tasks', task.id, { start: e.target.value || null })}
+                />
+              </label>
+            </>
+          )}
           <label className="field-row">
             <span>Termín</span>
             <input

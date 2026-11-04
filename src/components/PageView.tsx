@@ -10,7 +10,10 @@ import { EmojiPicker } from './EmojiPicker';
 import { Icon } from './Icon';
 import { IndustryPanel } from './Industries';
 import { JobHistory, JobPanel } from './Jobs';
-import { Section } from './Section';
+import { ProjectMeetingNotes } from './Meetings';
+import { ProjectPanel } from './ProjectPanel';
+import { Section, VIEW_ICONS } from './Section';
+import { SECTION_VIEWS } from '../lib/types';
 import { DevNav } from './Vyvoj';
 
 type Filter = 'all' | 'open' | 'mine';
@@ -36,6 +39,9 @@ export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (
   );
 
   const page = pages.find((p) => p.id === pageId);
+  // Sloupce z migrací 004 a 005: bez nich se nové ovládání neukáže, aby zápis neselhal.
+  const projectsEnabled = pages.some((p) => p.pinned !== undefined);
+  const viewsEnabled = sections.some((s) => s.view !== undefined);
 
   // Nová stránka má prázdný název, rovnou do něj přesuneme kurzor.
   const isUntitled = page?.title === '';
@@ -82,6 +88,7 @@ export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (
       tasks={all.filter(matchesFilter)}
       newTaskAssignee={newTaskAssignee}
       drag={drag}
+      viewsEnabled={viewsEnabled}
       onDragStart={onDragStart}
       onOpenTask={onOpenTask}
     />
@@ -125,6 +132,7 @@ export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (
       </header>
 
       {page.kind === 'template' && <p className="form-hint">Každá nová zakázka dostane kopii těchto úkolů.</p>}
+      {projectsEnabled && (page.kind === 'job' || page.kind === 'product') && <ProjectPanel page={page} />}
       {page.kind === 'job' && <JobPanel job={page} />}
       {page.kind === 'industry' && <IndustryPanel industry={page} />}
 
@@ -159,17 +167,25 @@ export function PageView({ pageId, onOpenTask }: { pageId: string; onOpenTask: (
       {(unsectioned.length > 0 || pageSections.length === 0) && renderSection(null, unsectioned)}
       {pageSections.map((section) => renderSection(section, pageTasks.filter((t) => t.section_id === section.id)))}
 
-      <button
-        type="button"
-        className="add-section"
-        onClick={() => {
-          const id = actions.createSection(page.id);
-          focusElement(`[data-section-title="${id}"]`, true);
-        }}
-      >
-        + Nová sekce
-      </button>
+      <div className="add-block">
+        <span className="add-block-label">+ Přidat blok</span>
+        {(viewsEnabled ? SECTION_VIEWS : SECTION_VIEWS.slice(0, 1)).map((v) => (
+          <button
+            type="button"
+            key={v.id}
+            className="btn-quiet"
+            onClick={() => {
+              const title = v.id === 'list' ? 'Nová sekce' : v.label;
+              const id = actions.createSection(page.id, viewsEnabled ? { title, view: v.id } : {});
+              focusElement(`[data-section-title="${id}"]`, true);
+            }}
+          >
+            <Icon name={VIEW_ICONS[v.id]} size={15} /> {v.label}
+          </button>
+        ))}
+      </div>
 
+      {(page.kind === 'job' || page.kind === 'product') && <ProjectMeetingNotes page={page} />}
       {page.kind === 'job' && <JobHistory job={page} />}
 
       {drag && (

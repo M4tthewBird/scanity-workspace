@@ -5,6 +5,8 @@ import type { Task } from '../lib/types';
 import { liveTasks, useWorkspace } from '../lib/useWorkspace';
 import { Icon } from './Icon';
 import { TaskListRow } from './Overview';
+import { hasMeetings } from '../lib/api';
+import { MeetingCard } from './Meetings';
 import { ProjectBoard } from './ProjectBoard';
 import { projectState } from './ProjectTile';
 
@@ -155,6 +157,8 @@ export function Dashboard({ onOpenTask }: { onOpenTask: (id: string) => void }) 
             ))}
             {burning.map((task) => <TaskListRow key={task.id} task={task} showPage onOpen={onOpenTask} />)}
           </Column>
+
+          {hasMeetings() && <MeetingCard />}
 
           <Column title="Co se dělo">
             {feed.length === 0 && <p className="empty-note">Zatím tu nic není. Aktivita týmu se ukáže tady.</p>}
