@@ -7,6 +7,7 @@ import { Ideas } from './components/Ideas';
 import { Industries } from './components/Industries';
 import { Jobs } from './components/Jobs';
 import { Logo } from './components/Logo';
+import { MeetingRoom } from './components/MeetingRoom';
 import { AllTasks } from './components/Overview';
 import { PageView } from './components/PageView';
 import { QuickAdd } from './components/QuickAdd';
@@ -127,6 +128,8 @@ function RouteView({ route, onOpenTask }: { route: Route; onOpenTask: (id: strin
       return <ContactDetail key={route.id} id={route.id} />;
     case 'stats':
       return <Stats />;
+    case 'meeting':
+      return <MeetingRoom key={route.id} id={route.id} onOpenTask={onOpenTask} />;
     default:
       return <Dashboard onOpenTask={onOpenTask} />;
   }
@@ -140,7 +143,7 @@ function WorkspaceApp({ me }: { me: Member }) {
   const [searching, setSearching] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const keepTask = useRef<string | null>(null);
-  const routeKey = route.name === 'page' || route.name === 'company' || route.name === 'contact' ? route.id : route.name;
+  const routeKey = 'id' in route ? route.id : route.name;
 
   useEffect(() => {
     setOpenTaskId(keepTask.current);

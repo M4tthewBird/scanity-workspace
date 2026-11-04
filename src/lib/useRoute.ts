@@ -12,9 +12,14 @@ export type Route =
   | { name: 'company'; id: string }
   | { name: 'contact'; id: string }
   | { name: 'stats' }
-  | { name: 'page'; id: string };
+  | { name: 'page'; id: string }
+  | { name: 'meeting'; id: string };
+
+export const meetingHref = (id: string) => `#/meeting/${id}`;
 
 function parseRoute(hash: string): Route {
+  const meeting = hash.match(/^#\/meeting\/([\w-]+)/);
+  if (meeting) return { name: 'meeting', id: meeting[1] };
   const page = hash.match(/^#\/page\/([\w-]+)/);
   if (page) return { name: 'page', id: page[1] };
   const company = hash.match(/^#\/crm\/company\/([\w-]+)/);

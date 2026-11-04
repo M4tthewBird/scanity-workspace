@@ -3835,6 +3835,240 @@ a.data-row:hover {
   }
 }
 
+/* Meeting ve velkém */
+
+.meeting-open {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.meeting-start-row {
+  display: flex;
+  gap: 8px;
+}
+
+.meeting-start-row .meeting-start {
+  flex: 1;
+}
+
+.meeting-past-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.room {
+  max-width: 1200px;
+}
+
+.room-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.room-heading {
+  flex: 1;
+  min-width: 240px;
+}
+
+.room-when {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.room-when .live-dot {
+  margin-left: 0;
+}
+
+.room-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 40px;
+  align-items: start;
+}
+
+.room-main {
+  min-width: 0;
+}
+
+.room-block {
+  padding: 22px 0;
+}
+
+.room-block + .room-block {
+  border-top: 1px solid var(--line-strong);
+}
+
+.room-block:first-child {
+  padding-top: 0;
+}
+
+.room-block-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.room-block-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.room-block-title {
+  margin: 0;
+  font-family: var(--heading);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+a.room-block-title:hover {
+  color: var(--accent-text);
+}
+
+.room-status {
+  width: calc(100% + 16px);
+  padding: 8px;
+  margin: 0 -8px 8px;
+  background: var(--surface);
+  border: 0;
+  border-radius: 10px;
+  color: var(--text-soft);
+  font: inherit;
+  resize: none;
+}
+
+.room-status:focus {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
+.room-notes .note-row {
+  padding: 4px 0;
+}
+
+.room-notes .note-text {
+  font-size: 15px;
+}
+
+.room-add {
+  padding-left: 6px;
+}
+
+.room-tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.room-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.room-empty {
+  padding: 24px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.room-side {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: 20px;
+}
+
+.room-side h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.room-group h3 {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font: 700 11px/1.6 var(--heading);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.room-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.room-pick:hover {
+  background: var(--hover);
+}
+
+.room-pick.is-in {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.room-pick-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-other {
+  width: 100%;
+}
+
+@media (max-width: 800px) {
+  .room-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .room-side {
+    position: static;
+    order: -1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

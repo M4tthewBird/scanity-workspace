@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { focusElement } from '../lib/focus';
 import { byPosition } from '../lib/order';
-import { pageHref } from '../lib/useRoute';
+import { meetingHref, pageHref } from '../lib/useRoute';
 import type { Meeting, MeetingNote, Page } from '../lib/types';
 import { useWorkspace } from '../lib/useWorkspace';
 import { EditableText } from './EditableText';
@@ -12,11 +12,11 @@ import { activeMeeting } from './ProjectTile';
 const PAST_SIZE = 5;
 const TICK_MS = 30_000;
 
-function minutesSince(iso: string): number {
+export function minutesSince(iso: string): number {
   return Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
 }
 
-function formatMeetingDate(iso: string): string {
+export function formatMeetingDate(iso: string): string {
   return new Date(iso).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
@@ -27,7 +27,7 @@ function useProjectOptions(): Page[] {
   return [...byPosition(projects.filter((p) => p.pinned)), ...byPosition(projects.filter((p) => !p.pinned))];
 }
 
-function ProjectSelect({ value, onChange, className }: { value: string | null; onChange: (id: string | null) => void; className?: string }) {
+export function ProjectSelect({ value, onChange, className }: { value: string | null; onChange: (id: string | null) => void; className?: string }) {
   const projects = useProjectOptions();
   const pinned = projects.filter((p) => p.pinned);
   const rest = projects.filter((p) => !p.pinned);
@@ -193,13 +193,25 @@ export function MeetingCard() {
             />
             <button type="button" className="btn-secondary" onClick={() => actions.endMeeting(active.id)}>Ukončit</button>
           </div>
+          <a className="btn-primary meeting-open" href={meetingHref(active.id)}>
+            <Icon name="open" size={14} /> Otevřít ve velkém
+          </a>
           <MeetingNotes meeting={active} />
           <p className="form-hint">Bod přiřaďte k projektu a objeví se na jeho dlaždici i stránce. Na dlaždicích je teď tlačítko Do zápisu.</p>
         </>
       ) : (
-        <button type="button" className="btn-primary meeting-start" onClick={() => actions.startMeeting()}>
-          <Icon name="play" size={14} /> Zahájit meeting
-        </button>
+        <div className="meeting-start-row">
+          <button type="button" className="btn-secondary meeting-start" onClick={() => actions.startMeeting()}>
+            <Icon name="play" size={14} /> Zahájit tady
+          </button>
+          <button
+            type="button"
+            className="btn-primary meeting-start"
+            onClick={() => (location.hash = meetingHref(actions.startMeeting()))}
+          >
+            <Icon name="open" size={14} /> Zahájit ve velkém
+          </button>
+        </div>
       )}
 
       {past.length > 0 && (
@@ -213,9 +225,14 @@ export function MeetingCard() {
               {opened?.id === m.id && (
                 <div className="meeting-past">
                   <MeetingNotes meeting={m} />
-                  <button type="button" className="btn-quiet" onClick={() => deleteMeeting(m)}>
-                    <Icon name="trash" size={14} /> Smazat meeting
-                  </button>
+                  <div className="meeting-past-actions">
+                    <a className="btn-quiet" href={meetingHref(m.id)}>
+                      <Icon name="open" size={14} /> Otevřít ve velkém
+                    </a>
+                    <button type="button" className="btn-quiet" onClick={() => deleteMeeting(m)}>
+                      <Icon name="trash" size={14} /> Smazat
+                    </button>
+                  </div>
                 </div>
               )}
             </li>

@@ -38,6 +38,7 @@ const TABS: { id: TabId; label: string; href: string; icon: IconName }[] = [
 function activeTab(route: Route, pageKind: string | undefined): TabId {
   switch (route.name) {
     case 'overview':
+    case 'meeting':
       return 'overview';
     case 'industries':
       return 'industries';
